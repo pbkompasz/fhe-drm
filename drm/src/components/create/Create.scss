@@ -35,6 +35,8 @@
   }
 
   &__explanation {
+    min-height: 4rem;
+    min-width: 100%;
     border-width: 1px;
     border-radius: 5px;
     background-color: grey;
