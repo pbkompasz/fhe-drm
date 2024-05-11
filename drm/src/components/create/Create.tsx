@@ -27,7 +27,6 @@ import CircularProgress from "@mui/material/CircularProgress";
 import * as crypto from "crypto";
 
 // TODO When creating the record check if a file already has the same hash
-// TODO different private key per NFT
 // TODO Order
 // init -> when showing the initial form
 // requested -> After hitting 'Create', call `checkProviderSetup`
@@ -54,10 +53,12 @@ const STORAGE_PROVIDERS = [
   {
     name: "pinata",
     label: "IPFS w/ Pinata",
+    implemented: false,
   },
   {
     name: "infura",
     label: "IPFS w/ Infura",
+    implemented: false,
   },
   {
     name: "web3.storage",
@@ -187,7 +188,20 @@ export const Create = () => {
     ]);
     const blob = new Blob([encryptedBytes], { type: "mp4" });
     const encryptedFile = new File([blob], "asd", { type: "mp4" });
-    setFile(encryptedFile);
+    return encryptedFile;
+  };
+
+  const decryptFile = async (encryptedFile: File, key: string) => {
+    const bytes = await readFileAsBytes(encryptedFile);
+    const decipher = crypto.createDecipher("aes-256-cbc", key);
+    const decryptedBytes = Buffer.concat([
+      decipher.update(bytes),
+      decipher.final(),
+    ]);
+
+    const blob = new Blob([decryptedBytes], { type: "mp4" });
+    const decryptedFile = new File([blob], "asd", { type: "mp4" });
+    return decryptedFile;
   };
 
   function getImageMetadata(file: File) {
@@ -268,6 +282,11 @@ export const Create = () => {
         name: "Size",
         value: file.size,
         encrypted: true,
+      },
+      {
+        name: "Created",
+        value: +new Date(),
+        encrypted: false,
       },
     ];
 
@@ -544,7 +563,9 @@ export const Create = () => {
               label="Primary Storage"
               onChange={(e) => setPrimaryMethod(e.target.value as UploadMethod)}
             >
-              {STORAGE_PROVIDERS.map((provider) => (
+              {STORAGE_PROVIDERS.filter(
+                (provider) => provider.implemented !== false
+              ).map((provider) => (
                 <MenuItem key={provider.name} value={provider.name}>
                   {provider.label}
                 </MenuItem>
@@ -569,7 +590,9 @@ export const Create = () => {
               }
             >
               <MenuItem value="none">None</MenuItem>
-              {STORAGE_PROVIDERS.map((provider) => (
+              {STORAGE_PROVIDERS.filter(
+                (provider) => provider.implemented !== false && provider.name !== primaryMethod
+              ).map((provider) => (
                 <MenuItem key={provider.name} value={provider.name}>
                   {provider.label}
                 </MenuItem>
