@@ -14,7 +14,7 @@ export const router = createBrowserRouter([
     element: <Create />,
   },
   {
-    path: "/collection/:id?",
+    path: "/collection/:id",
     element: <Collection></Collection>,
   },
   {

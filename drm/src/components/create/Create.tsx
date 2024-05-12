@@ -4,9 +4,7 @@ import "./Create.scss";
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import Stack from "@mui/material/Stack";
-import RadioGroup from "@mui/material/RadioGroup";
 import FormControlLabel from "@mui/material/FormControlLabel";
-import Radio from "@mui/material/Radio";
 import { useState } from "react";
 import Divider from "@mui/material/Divider";
 import MenuItem from "@mui/material/MenuItem";
@@ -24,7 +22,9 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContentText from "@mui/material/DialogContentText";
 import CircularProgress from "@mui/material/CircularProgress";
-import * as crypto from "crypto";
+import { getDefaultMetadata } from "../../util/create";
+import { decryptFile, encryptFile } from "../../util/encrypt";
+import { createCollection, mintNFT, updateCollection } from "../../util/mint";
 
 // TODO When creating the record check if a file already has the same hash
 // TODO Order
@@ -36,18 +36,13 @@ import * as crypto from "crypto";
 //    upload, which returns the URI
 //    mint NFT (for now)
 
-interface Metadata {
+export interface Metadata {
   name: string;
   value: string | number;
   encrypted?: boolean;
 }
 
-type Record = {
-  id: string;
-  uri: string;
-  collectionId: string;
-  nftId: string;
-};
+type UploadMethod = "pinata" | "infura" | "web3.storage";
 
 const STORAGE_PROVIDERS = [
   {
@@ -66,19 +61,42 @@ const STORAGE_PROVIDERS = [
   },
 ];
 
-type UploadMethod = "pinata" | "infura" | "web3.storage";
-
 export const Create = () => {
-  const [ownershipType, setOwnershipType] = useState<"collection" | "nft">(
-    "nft"
+  const [status, setStatus] = useState<"init" | "requested" | "completed">(
+    "init"
   );
+  const [error, setError] = useState("");
+
+  const [encryptedUpload, setEncryptedUpload] = useState(false);
+  const [file, setFile] = useState<File>();
+  const [assignToCollection, setAssignToCollection] = useState(false);
+  const [collectionId, setCollectionId] = useState("");
+
   const [metadata, setMetadata] = useState<Metadata[]>([
     {
-      name: "Name",
-      value: "asd",
+      name: "Your field",
+      value: 1,
       encrypted: false,
     },
   ]);
+
+  const [primaryMethod, setPrimaryMethod] =
+    useState<UploadMethod>("web3.storage");
+  const [secondaryMethod, setSecondaryMethod] = useState<UploadMethod | "none">(
+    "none"
+  );
+
+  const createDefaultMetadata = async (file: File) => {
+    const newMetadata = await getDefaultMetadata(file);
+
+    newMetadata.push({
+      name: "Your field",
+      value: 1,
+      encrypted: true,
+    });
+    setMetadata(newMetadata);
+  };
+
   const updateMetadata = (
     index: number,
     field: "name" | "value" | "encrypted",
@@ -92,21 +110,26 @@ export const Create = () => {
     });
   };
 
-  const [showSetup, setShowSetup] = useState(true);
-  const [error, setError] = useState("");
-  const [record, setRecord] = useState<Record>({} as Record);
-  const [file, setFile] = useState<File>();
-  const [encryptedUplaod, setEncryptedUpload] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
 
-  const [primaryMethod, setPrimaryMethod] =
-    useState<UploadMethod>("web3.storage");
-  const [secondaryMethod, setSecondaryMethod] = useState<UploadMethod | "none">(
-    "none"
-  );
+  const setupWeb3Storage = async () => {
+    const client = await create();
+    const account = await client.login(emailAddress);
+    const space = await client.createSpace("drm");
+    await space.save();
+    await account.provision(space.did());
+  };
 
-  const [status, setStatus] = useState<
-    "init" | "in_progress" | "requested" | "completed"
-  >("init");
+  const [currentAction, setCurrentAction] = useState<
+    | "encrypting"
+    | "uploading"
+    | "minting"
+    | "updating_collection"
+    | "creating_collection"
+    | "none"
+  >("none");
+  const [uri, setUri] = useState("");
+  const [recordId, setRecordId] = useState<string | number>("");
 
   const upload = async (method: UploadMethod, file: File) => {
     let client;
@@ -120,22 +143,7 @@ export const Create = () => {
       default:
         client = await create();
         resp = await client.uploadFile(file);
-        console.log(resp);
-        break;
-    }
-  };
-
-  function timeout(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  const initMint = async () => {
-    setStatus("in_progress");
-    const client = await create();
-    if (!Object.keys(client.accounts()).length) {
-      setShowSetup(true);
-    } else {
-      await createRecord();
+        return resp.toString();
     }
   };
 
@@ -143,197 +151,50 @@ export const Create = () => {
     try {
       if (!file) throw new Error("No file selected");
       setStatus("requested");
-      if (encryptedUplaod) encryptFile(file, "asd");
-      await upload(primaryMethod, file);
+      const client = await create();
+
+      if (!Object.keys(client.accounts()).length) {
+        setShowSetup(true);
+        return;
+      }
+
+      const seed = Math.floor(Math.random() * 1000);
+      let f = file;
+      if (encryptedUpload) {
+        setCurrentAction("encrypting");
+        // TODO Random number
+        f = await encryptFile(file, seed);
+        setFile(f);
+      }
+      setCurrentAction("uploading");
+      const did = await upload(primaryMethod, f);
+      setUri(`https://${did}.ipfs.w3s.link`);
       if (secondaryMethod !== "none") await upload(secondaryMethod, file);
-      await timeout(5000);
-      const newRecord = {} as Record;
-      setRecord(newRecord);
+
+      setCurrentAction("minting");
+      const id = await mintNFT(uri, seed, metadata);
+      setRecordId(id);
+
+      if (assignToCollection) {
+        if (collectionId) {
+          setCurrentAction("updating_collection");
+          await createCollection(collectionId, id);
+        } else {
+          setCurrentAction("creating_collection");
+
+          await updateCollection(collectionId, id);
+        }
+      }
       setStatus("completed");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.log(e);
+      setStatus("init");
       setError("Error creating record. " + e.message);
       setTimeout(() => {
         setError("");
       }, 5000);
     }
-  };
-
-  function readFileAsBytes(file: File): Promise<Uint8Array> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = function (event) {
-        const result = event.target?.result;
-        if (result) {
-          const bytes = new Uint8Array(result as ArrayBuffer);
-          resolve(bytes);
-        } else {
-          reject("empty");
-        }
-      };
-      reader.onerror = function (event) {
-        reject(event.target?.error);
-      };
-      reader.readAsArrayBuffer(file);
-    });
-  }
-
-  const encryptFile = async (file: File, key: string) => {
-    const bytes = await readFileAsBytes(file);
-    const cipher = crypto.createCipher("aes-256-cbc", key);
-    const encryptedBytes = Buffer.concat([
-      cipher.update(bytes),
-      cipher.final(),
-    ]);
-    const blob = new Blob([encryptedBytes], { type: "mp4" });
-    const encryptedFile = new File([blob], "asd", { type: "mp4" });
-    return encryptedFile;
-  };
-
-  const decryptFile = async (encryptedFile: File, key: string) => {
-    const bytes = await readFileAsBytes(encryptedFile);
-    const decipher = crypto.createDecipher("aes-256-cbc", key);
-    const decryptedBytes = Buffer.concat([
-      decipher.update(bytes),
-      decipher.final(),
-    ]);
-
-    const blob = new Blob([decryptedBytes], { type: "mp4" });
-    const decryptedFile = new File([blob], "asd", { type: "mp4" });
-    return decryptedFile;
-  };
-
-  function getImageMetadata(file: File) {
-    return new Promise((resolve) => {
-      const fr = new FileReader();
-
-      fr.onload = function () {
-        const img = new Image();
-
-        img.onload = function () {
-          console.log(img.height);
-          const height = img.height;
-          const width = img.width;
-          resolve({ height, width });
-        };
-
-        img.src = String(fr.result);
-      };
-
-      fr.readAsDataURL(file);
-    });
-  }
-
-  function getVideoMetadata(file: File) {
-    return new Promise((resolve) => {
-      // create the video element
-      const video = document.createElement("video");
-
-      // place a listener on it
-      video.addEventListener(
-        "loadedmetadata",
-        function () {
-          // retrieve dimensions
-          const height = this.videoHeight;
-          const width = this.videoWidth;
-          const duration = this.duration;
-
-          // send back result
-          resolve({ height, width, duration });
-        },
-        false
-      );
-
-      // start download meta-datas
-      video.src = URL.createObjectURL(file);
-    });
-  }
-
-  function getDocumentMetadata(file: File) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = function (event) {
-        const text = event.target?.result;
-        if (text) {
-          const lineCount = (String(text).match(/\n/g) || []).length + 1;
-          resolve({ lineCount });
-        }
-      };
-      reader.onerror = reject;
-      reader.readAsText(file);
-    });
-  }
-
-  const createDefaultMetadata = async (file: File) => {
-    const extension = file.name.split(".")[1];
-    const isVideo = ["mpg", "mp2", "mpeg", "mpe", "mpv", "mp4"];
-    const isImage = ["gif", "jpg", "jpeg", "png"];
-    const isDocument = ["txt", "json"];
-    // name, filesize, etc.
-    // resolution and length for video
-    const newMetadata: Metadata[] = [
-      {
-        name: "Name",
-        value: file.name.split(".")[0],
-        encrypted: true,
-      },
-      {
-        name: "Size",
-        value: file.size,
-        encrypted: true,
-      },
-      {
-        name: "Created",
-        value: +new Date(),
-        encrypted: false,
-      },
-    ];
-
-    if (isVideo.includes(extension)) {
-      const { width, height, duration } = await getVideoMetadata(file);
-
-      newMetadata.push({
-        name: "Width",
-        value: width,
-        encrypted: true,
-      });
-      newMetadata.push({
-        name: "Height",
-        value: height,
-        encrypted: true,
-      });
-      newMetadata.push({
-        name: "Duration",
-        value: duration,
-        encrypted: true,
-      });
-    }
-
-    if (isImage.includes(extension)) {
-      const { width, height } = await getImageMetadata(file);
-      console.log(width);
-      newMetadata.push({
-        name: "Width",
-        value: width,
-        encrypted: true,
-      });
-      newMetadata.push({
-        name: "Height",
-        value: height,
-        encrypted: true,
-      });
-    }
-
-    if (isDocument.includes(extension)) {
-      const { lineCount } = await getDocumentMetadata(file);
-      newMetadata.push({
-        name: "Number of lines",
-        value: lineCount,
-        encrypted: true,
-      });
-    }
-    setMetadata(newMetadata);
   };
 
   const onFileUpload = (file: File) => {
@@ -352,21 +213,9 @@ export const Create = () => {
     ]);
   };
 
-  const [emailAddress, setEmailAddress] =
-    useState<`${string}@${string}`>("demo@demo.com");
-  const [setupStatus, setSetupStatus] = useState<
-    "init" | "in_progress" | "completed"
-  >("init");
-
-  const setupWeb3Storage = async () => {
-    const client = await create();
-    setSetupStatus("in_progress");
-    const account = await client.login(emailAddress);
-    setSetupStatus("completed");
-    const space = await client.createSpace("drm");
-    await space.save();
-    await account.provision(space.did());
-  };
+  const [emailAddress, setEmailAddress] = useState<`${string}@${string}`>(
+    "your_email@gmail.com"
+  );
 
   const getSetupContent = (method: UploadMethod) => {
     switch (method) {
@@ -383,12 +232,10 @@ export const Create = () => {
               label="Email"
             ></TextField>
             <Button onClick={() => setupWeb3Storage()}>Validate</Button>
-            {setupStatus === "in_progress" && (
-              <Typography>
-                <CircularProgress />
-                Head to your inbox and click the validation link
-              </Typography>
-            )}
+            <Typography>
+              <CircularProgress />
+              Head to your inbox and click the validation link
+            </Typography>
           </>
         );
 
@@ -414,10 +261,10 @@ export const Create = () => {
             Create New Record
           </Typography>
           <FormControlLabel
-            label="Encrypt file before minting"
+            label="Encrypt file before creating new record"
             control={
               <Checkbox
-                checked={encryptedUplaod}
+                checked={encryptedUpload}
                 onChange={(e) => setEncryptedUpload(e.target.checked)}
                 inputProps={{ "aria-label": "controlled" }}
               />
@@ -441,61 +288,32 @@ export const Create = () => {
             )}
           </Dropzone>
           <Typography variant="h2" alignSelf="flex-start">
-            Owner Collection/NFT
+            Collection
           </Typography>
-          <RadioGroup
-            row
-            aria-labelledby="demo-row-radio-buttons-group-label"
-            name="row-radio-buttons-group"
-          >
+          <Stack direction="row">
             <FormControlLabel
-              checked={ownershipType === "collection"}
-              onChange={() => setOwnershipType("collection")}
-              value="collection"
-              control={<Radio />}
+              label="Assign NFT to a new or existing collection"
               disabled
-              label="Collection"
-            />
-            <FormControlLabel
-              value="nft"
-              checked={ownershipType === "nft"}
-              onChange={() => setOwnershipType("nft")}
-              control={<Radio />}
-              label="Single NFT"
-            />
-          </RadioGroup>
-          <Typography className="form__explanation">
-            {ownershipType === "collection"
-              ? "If a collection address is added, users who have access to an NFT in the collection have access to the file. You can further customize roles and actions e.g. copy-able."
-              : "Only the holder of this single NFT has access."}
-          </Typography>
-          {ownershipType === "collection" && (
-            <RadioGroup
-              style={{ width: "100%" }}
-              aria-labelledby="demo-row-radio-buttons-group-label"
-              name="row-radio-buttons-group"
-            >
-              <Stack direction="row">
-                <FormControlLabel
-                  // checked={ownershipType === "collection"}
-                  onChange={() => setOwnershipType("collection")}
-                  value="collection"
-                  control={<Radio />}
-                  label="Link file to an existing collection"
+              control={
+                <Checkbox
+                  checked={assignToCollection}
+                  onChange={(e) => setAssignToCollection(e.target.checked)}
+                  inputProps={{ "aria-label": "controlled" }}
                 />
-                {/* TODO Change it a select */}
-                {/* TODO Fetch collections where owner */}
-                <TextField></TextField>
-              </Stack>
-              <FormControlLabel
-                value="nft"
-                // checked={option2}
-                // onChange={() => setOwnershipType("nft")}
-                control={<Radio />}
-                label="Create a new collection"
-              />
-            </RadioGroup>
-          )}
+              }
+            />
+            <TextField
+              label="Enter existing collection name"
+              disabled={!assignToCollection}
+              value={collectionId}
+              onChange={(e) => setCollectionId(e.target.value)}
+            ></TextField>
+          </Stack>
+          <Typography className="form__explanation">
+            If a collection address is added, users who have access to an NFT in
+            the collection have access to the file. You can further customize
+            roles and actions e.g. copy-able.
+          </Typography>
 
           <Divider />
           <Typography alignSelf="flex-start" variant="h2">
@@ -520,7 +338,7 @@ export const Create = () => {
                 />
                 <TextField
                   id="outlined-basic"
-                  label="Value"
+                  label="Value (numeric or boolean values only)"
                   value={entry.value}
                   onChange={(e) =>
                     updateMetadata(index, "value", e.target.value)
@@ -591,7 +409,9 @@ export const Create = () => {
             >
               <MenuItem value="none">None</MenuItem>
               {STORAGE_PROVIDERS.filter(
-                (provider) => provider.implemented !== false && provider.name !== primaryMethod
+                (provider) =>
+                  provider.implemented !== false &&
+                  provider.name !== primaryMethod
               ).map((provider) => (
                 <MenuItem key={provider.name} value={provider.name}>
                   {provider.label}
@@ -600,7 +420,7 @@ export const Create = () => {
             </Select>
           </FormControl>
           <Button
-            onClick={() => initMint()}
+            onClick={() => createRecord()}
             variant="contained"
             style={{ marginLeft: "auto", width: "6rem" }}
           >
@@ -632,6 +452,17 @@ export const Create = () => {
               </Button>
             </DialogActions>
           </Dialog>
+          {currentAction !== "none" && (
+            <Stack
+              direction="row"
+              justifyContent="center"
+              alignItems="center"
+              style={{ width: "100%" }}
+            >
+              <CircularProgress />
+              <Typography>{currentAction}</Typography>
+            </Stack>
+          )}
         </>
       )}
 
@@ -640,28 +471,26 @@ export const Create = () => {
         <>
           <Typography variant="h1">
             {metadata.find((field) => field.name === "Name")?.value ??
-              "filename"}
+              "Success"}
           </Typography>
-          <Typography>
-            {ownershipType === "collection"
-              ? "This record is available to NFT owners in collection: "
-              : "File available to the owner of the following NFT: "}
-            {record.id ?? "0x43124321432432random4312432id"}
-          </Typography>
-          {ownershipType === "collection" && (
+
+          {assignToCollection && (
             <Typography>
               You can manage roles, actions, etc. by clicking{" "}
-              <a href={`/collection/${record.collectionId}`}>here</a>
+              <a href={`/collection/${collectionId}`}>here</a>
             </Typography>
           )}
 
           <Typography>
-            Shareable link:
-            <a
-              target="_blank"
-              href={record.uri ?? "https://asd.com/1234asd1234"}
-            >
-              {record.uri ?? "https://asd.com/1234asd1234"}
+            Your file is uploaded to:
+            <a target="_blank" href={uri}>
+              {uri}
+            </a>
+          </Typography>
+          <Typography>
+            You can view it &nbsp;
+            <a target="_blank" href={`/record/${recordId}`}>
+              here
             </a>
           </Typography>
         </>
