@@ -42,11 +42,11 @@ contract RecordNFT is ERC721, Reencrypt {
 
         TokenData storage newToken = _tokens.push();
         newToken.tokenURI = _tokenURI;
-        newToken.tokenPrivateKey = TFHE.asEuint64(3);
+        newToken.tokenPrivateKey = TFHE.asEuint64(encryptedKey);
         newToken.id = tokenId;
 
         for (uint i = 0; i < metadataArray.length; i++) {
-            bytes32 metadataKey = keccak256(abi.encodePacked(metadataArray[i].name));
+            // bytes32 metadataKey = keccak256(abi.encodePacked(metadataArray[i].name));
             string memory metadataKey = metadataArray[i].name;
             bytes memory value = metadataArray[i].value;
             if (metadataArray[i].encrypted) {
