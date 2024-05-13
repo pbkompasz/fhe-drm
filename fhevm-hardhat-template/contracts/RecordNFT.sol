@@ -33,7 +33,7 @@ contract RecordNFT is ERC721, Reencrypt {
 
     function mintNFT(
         string memory _tokenURI,
-        // bytes calldata encryptedKey,
+        bytes calldata encryptedKey,
         MetadataInput[] memory metadataArray
     ) external {
         // TODO Encrypt using public key of sender
@@ -46,7 +46,7 @@ contract RecordNFT is ERC721, Reencrypt {
         newToken.id = tokenId;
 
         for (uint i = 0; i < metadataArray.length; i++) {
-            // bytes32 metadataKey = keccak256(abi.encodePacked(metadataArray[i].name));
+            bytes32 metadataKey = keccak256(abi.encodePacked(metadataArray[i].name));
             string memory metadataKey = metadataArray[i].name;
             bytes memory value = metadataArray[i].value;
             if (metadataArray[i].encrypted) {
@@ -68,10 +68,6 @@ contract RecordNFT is ERC721, Reencrypt {
             _tokens[tokenId].privateKeyComplex[i] = TFHE.asEuint32(_tokenPrivateKey[i]);
         }
     }
-
-    // function getTokenURI(uint256 tokenId) external view returns (string memory) {
-    //     return _tokens[tokenId].tokenURI;
-    // }
 
     // just the seed as a number for now
     function getPrivateKeySimple(
