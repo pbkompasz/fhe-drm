@@ -32,7 +32,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Stack direction="row" gap={10} alignSelf="center">
           <a href="/">Home</a>
           <a href="/record">View created records</a>
-          <a href="/collection">Manage collections</a>
+          {/* <a href="/collection">Manage collections</a> */}
           <a href="/create">Create new record</a>
         </Stack>
         <Divider />
