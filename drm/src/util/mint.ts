@@ -63,13 +63,14 @@ const getNFT = async (id: number) => {
   const publicKey = instance.getPublicKey(contractAddress);
 
   const uri = await contract.getFunction("getTokenURI").call(0);
-  const seed = await contract.getPrivateKeySimple(
+  const originalSeed = await contract.getPrivateKeySimple(
     id,
     publicKey,
     publicKey?.signature
   );
+  const seed = instance.decrypt(contractAddress, originalSeed);
 
-  return { uri, seed };
+  return { uri, seed, originalSeed };
 };
 
 const createCollection = async (
