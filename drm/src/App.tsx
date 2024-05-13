@@ -9,21 +9,17 @@ function App() {
       <Typography variant="h1">Welcome,</Typography>
       <Typography variant="body1">
         This is a demo DRM application to showcase the power and utility of
-        fully homomorphic encryption. Our implementation describes two ownership
-        scenarios, when a new record is created:
+        fully homomorphic encryption.
       </Typography>
-      <ol>
-        <li>
-          An asset e.g. video file, document can be linked to a new or existing
-          NFT. This NFT represents ownership of the underlying asset.
-        </li>
-        <li>
-          In the second scenario an asset linked to a new or existing
-          collection. Every NFT in this collection represents ownership of the
-          asset and grants various roles and actions e.g. CRUD, sharing, etc.
-        </li>
-      </ol>
-      <Typography variant="body1"></Typography>
+      <Typography variant="body1">
+        You can upload and generate an ownership NFT by clicking{" "}
+        <a href="/create">here</a>
+      </Typography>
+      <Typography variant="body1">
+        Link your new or existing NFT to a collection. Every NFT in this
+        collection represents ownership of the asset and grants various roles
+        and actions e.g. CRUD, sharing, etc.
+      </Typography>
     </Stack>
   );
 }
