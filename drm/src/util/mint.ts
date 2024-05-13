@@ -19,22 +19,24 @@ const mintNFT = async (uri: string, seed: number, metadata: Metadata[]) => {
   const ctr = new ethers.Contract(contractAddress, nftABI.abi, signer);
 
   const instance = await createInstance({ chainId, publicKey: chainPublicKey });
-  const metadataArray = [
-    {
-      name: "Name1",
-      value: ethers.encodeBytes32String("Value1"),
-      encrypted: false,
-    },
-    {
-      name: "Name2",
-      value: ethers.encodeBytes32String("Value2"),
-      encrypted: true,
-    },
-  ];
+  // const metadataArray = [
+  //   {
+  //     name: "Name1",
+  //     value: ethers.encodeBytes32String("Value1"),
+  //     encrypted: false,
+  //   },
+  // ];
 
   const encryptedKey = instance.encrypt64(seed);
   console.log(encryptedKey);
-  const tx = await ctr.mintNFT(uri, metadataArray);
+  const tx = await ctr.mintNFT(
+    uri,
+    seed,
+    metadata.map((m) => {
+      m.value = ethers.encodeBytes32String(String(m.value));
+      return m;
+    })
+  );
   await tx.wait();
 
   return 1;
@@ -61,9 +63,13 @@ const getNFT = async (id: number) => {
   const publicKey = instance.getPublicKey(contractAddress);
 
   const uri = await contract.getFunction("getTokenURI").call(0);
-  const seed = await contract.getPrivateKeySimple(id, publicKey, publicKey?.signature);
+  const seed = await contract.getPrivateKeySimple(
+    id,
+    publicKey,
+    publicKey?.signature
+  );
 
-  return {uri, seed};
+  return { uri, seed };
 };
 
 const createCollection = async (
