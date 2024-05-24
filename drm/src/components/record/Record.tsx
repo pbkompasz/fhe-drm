@@ -3,7 +3,7 @@ import Typography from "@mui/material/Typography";
 import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { getNFTs, getNFT } from "../../util/mint";
-import { decryptFile } from "../../util/encrypt";
+// import { decryptFile } from "../../util/encrypt";
 
 const RecordDetails = ({ id }: { id: string }) => {
   const [uri, setUri] = useState();
@@ -29,7 +29,11 @@ const RecordDetails = ({ id }: { id: string }) => {
         const a = document.getElementById("download_crypted");
         // const aDecrypted = document.getElementById("download_decrypted");
         if (a) {
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore
           a.href = url;
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore
           a.download = "download.png";
         }
         // if (aDecrypted) {

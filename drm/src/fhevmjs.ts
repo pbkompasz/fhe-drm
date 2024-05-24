@@ -10,6 +10,8 @@ export const init = async () => {
 let instance: FhevmInstance;
 
 export const createFhevmInstance = async () => {
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   const provider = new BrowserProvider(window.ethereum);
   const network = await provider.getNetwork();
   const chainId = +network.chainId.toString();
@@ -29,6 +31,8 @@ export const getSignature = async (contractAddress: string, userAddress: string)
   } else {
     const { publicKey, eip712 } = getInstance().generatePublicKey({ verifyingContract: contractAddress });
     const params = [userAddress, JSON.stringify(eip712)];
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
     const signature: string = await window.ethereum.request({ method: 'eth_signTypedData_v4', params });
     getInstance().setSignature(contractAddress, signature);
     return { signature, publicKey };

@@ -1,6 +1,8 @@
 import { Metadata } from "../components/create/Create";
 
-export function getImageMetadata(file: File) {
+export function getImageMetadata(
+  file: File
+): Promise<{ height: number; width: number }> {
   return new Promise((resolve) => {
     const fr = new FileReader();
 
@@ -21,7 +23,9 @@ export function getImageMetadata(file: File) {
   });
 }
 
-export function getVideoMetadata(file: File) {
+export function getVideoMetadata(
+  file: File
+): Promise<{ height: number; width: number; duration: number }> {
   return new Promise((resolve) => {
     // create the video element
     const video = document.createElement("video");
@@ -46,7 +50,9 @@ export function getVideoMetadata(file: File) {
   });
 }
 
-export function getDocumentMetadata(file: File) {
+export function getDocumentMetadata(
+  file: File
+): Promise<{ lineCount: number }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = function (event) {
@@ -62,67 +68,67 @@ export function getDocumentMetadata(file: File) {
 }
 
 export const getDefaultMetadata = async (file: File) => {
-const extension = file.name.split(".")[1];
-    const isVideo = ["mpg", "mp2", "mpeg", "mpe", "mpv", "mp4"];
-    const isImage = ["gif", "jpg", "jpeg", "png"];
-    const isDocument = ["txt", "json"];
-    // name, filesize, etc.
-    // resolution and length for video
-    const newMetadata: Metadata[] = [
-      {
-        name: "Size",
-        value: file.size,
-        encrypted: true,
-      },
-      {
-        name: "Created",
-        value: +new Date(),
-        encrypted: false,
-      },
-    ];
+  const extension = file.name.split(".")[1];
+  const isVideo = ["mpg", "mp2", "mpeg", "mpe", "mpv", "mp4"];
+  const isImage = ["gif", "jpg", "jpeg", "png"];
+  const isDocument = ["txt", "json"];
+  // name, filesize, etc.
+  // resolution and length for video
+  const newMetadata: Metadata[] = [
+    {
+      name: "Size",
+      value: file.size,
+      encrypted: true,
+    },
+    {
+      name: "Created",
+      value: +new Date(),
+      encrypted: false,
+    },
+  ];
 
-    if (isVideo.includes(extension)) {
-      const { width, height, duration } = await getVideoMetadata(file);
+  if (isVideo.includes(extension)) {
+    const { width, height, duration } = await getVideoMetadata(file);
 
-      newMetadata.push({
-        name: "Width",
-        value: width,
-        encrypted: true,
-      });
-      newMetadata.push({
-        name: "Height",
-        value: height,
-        encrypted: true,
-      });
-      newMetadata.push({
-        name: "Duration",
-        value: duration,
-        encrypted: true,
-      });
-    }
+    newMetadata.push({
+      name: "Width",
+      value: width,
+      encrypted: true,
+    });
+    newMetadata.push({
+      name: "Height",
+      value: height,
+      encrypted: true,
+    });
+    newMetadata.push({
+      name: "Duration",
+      value: duration,
+      encrypted: true,
+    });
+  }
 
-    if (isImage.includes(extension)) {
-      const { width, height } = await getImageMetadata(file);
-      console.log(width);
-      newMetadata.push({
-        name: "Width",
-        value: width,
-        encrypted: true,
-      });
-      newMetadata.push({
-        name: "Height",
-        value: height,
-        encrypted: true,
-      });
-    }
+  if (isImage.includes(extension)) {
+    const { width, height } = await getImageMetadata(file);
+    console.log(width);
+    newMetadata.push({
+      name: "Width",
+      value: width,
+      encrypted: true,
+    });
+    newMetadata.push({
+      name: "Height",
+      value: height,
+      encrypted: true,
+    });
+  }
 
-    if (isDocument.includes(extension)) {
-      const { lineCount } = await getDocumentMetadata(file);
-      newMetadata.push({
-        name: "Number of lines",
-        value: lineCount,
-        encrypted: true,
-      });
-    }
-    return newMetadata;
-}
+  if (isDocument.includes(extension)) {
+    const { lineCount } = await getDocumentMetadata(file);
+    newMetadata.push({
+      name: "Number of lines",
+      value: lineCount,
+      encrypted: true,
+    });
+  }
+  return newMetadata;
+};

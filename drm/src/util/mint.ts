@@ -4,6 +4,8 @@ import nftABI from "./RecordNFT.json";
 import { createInstance, getPublicKeyCallParams, initFhevm } from "fhevmjs";
 
 const contractAddress = "0x3B19180930B3229b7652849A2798a305d0a07911";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 const provider = new ethers.BrowserProvider(window.ethereum);
 const contract = new Contract(contractAddress, nftABI.output.abi, provider);
 
@@ -31,11 +33,11 @@ const mintNFT = async (uri: string, seed: number, metadata: Metadata[]) => {
   const tx = await ctx.mintNFT(
     uri,
     encryptedKey,
-    // metadata.map((m) => {
-    //   m.value = ethers.encodeBytes32String(String(m.value));
-    //   return m;
-    // })
-    metadataArray
+    metadataArray ??
+      metadata.map((m) => {
+        m.value = ethers.encodeBytes32String(String(m.value));
+        return m;
+      })
   );
   await tx.wait();
 
@@ -55,6 +57,8 @@ const getNFTs = async () => {
 const getNFT = async (id: number) => {
   try {
     await initFhevm();
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
     const ctx = new Contract(contractAddress, nftABI.output.abi, signer);
@@ -75,6 +79,8 @@ const getNFT = async (id: number) => {
     });
 
     const params = [await signer.getAddress(), JSON.stringify(eip712)];
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     const signature: string = await window.ethereum.request({
       method: "eth_signTypedData_v4",
       params,
@@ -93,18 +99,17 @@ const getNFT = async (id: number) => {
 
     return { uri, seed, originalSeed };
   } catch (error) {
+    return { uri: null, seed: null, originalSeed: null };
     console.log(error);
   }
 };
 
-const createCollection = async (
-  collectionId: string,
-  uri: string | number
-) => {};
+const createCollection = async (collectionId: string, uri: string | number) => {
+  console.log(collectionId, uri);
+};
 
-const updateCollection = async (
-  collectionId: string,
-  uri: string | number
-) => {};
+const updateCollection = async (collectionId: string, uri: string | number) => {
+  console.log(collectionId, uri);
+};
 
 export { mintNFT, createCollection, updateCollection, getNFTs, getNFT };

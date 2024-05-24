@@ -100,7 +100,9 @@ export const getIvFromPassphrase = async (passphrase: string) => {
 
 const _arrayBufferFromHexString = (hexString: string) => {
   const bytes = Uint8Array.from(
-    hexString.match(/.{1,2}/g).map((byte: any) => parseInt(byte, 16))
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    hexString.match(/.{1,2}/g).map((byte) => parseInt(byte, 16))
   );
   return bytes.buffer;
 };
