@@ -23,7 +23,7 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContentText from "@mui/material/DialogContentText";
 import CircularProgress from "@mui/material/CircularProgress";
 import { getDefaultMetadata } from "../../util/create";
-import { decryptFile, encryptFile } from "../../util/encrypt";
+import { encryptFile } from "../../util/encrypt";
 import { createCollection, mintNFT, updateCollection } from "../../util/mint";
 
 // TODO When creating the record check if a file already has the same hash
@@ -111,6 +111,8 @@ export const Create = () => {
   };
 
   const [showSetup, setShowSetup] = useState(false);
+  const [createAccountDisabled, setCreateAccountDisabled] = useState(true);
+  const [setupMessage, setSetupMessage] = useState("");
 
   const setupWeb3Storage = async () => {
     const client = await create();
@@ -119,6 +121,47 @@ export const Create = () => {
     await space.save();
     await account.provision(space.did());
   };
+
+  const verifyStorageAccount = async (
+    type: "primary" | "secondary" = "primary"
+  ) => {
+    console.log(type);
+    const client = await create();
+    const isRegistered = Object.keys(client.accounts()).find(
+      (account: string) => {
+        const accArr = account.split(":");
+        const emailArr = emailAddress.split("@");
+        return accArr[2] === emailArr[1] && accArr[3] === emailArr[0];
+      }
+    );
+    if (isRegistered) {
+      setCreateAccountDisabled(true);
+      setSetupMessage("You have an account set up.");
+      const account = await client.login(emailAddress);
+      const space = await client.createSpace("drm");
+      await space.save();
+      await account.provision(space.did());
+    } else {
+      setCreateAccountDisabled(false);
+      setSetupMessage("You don't have a linked account. Click create account.");
+    }
+    return !!isRegistered;
+  };
+
+  const createStorageAccount = async (
+    type: "primary" | "secondary" = "primary"
+  ) => {
+    console.log(type);
+    const client = await create();
+    setSetupMessage("Check your emails");
+    const account = await client.login(emailAddress);
+    setCreateAccountDisabled(false);
+    const space = await client.createSpace("drm");
+    await space.save();
+    await account.provision(space.did());
+  };
+
+  const completeStorageSetup = () => {};
 
   const [currentAction, setCurrentAction] = useState<
     | "encrypting"
@@ -168,6 +211,7 @@ export const Create = () => {
       }
       setCurrentAction("uploading");
       const did = await upload(primaryMethod, f);
+      console.log(did);
       setUri(`https://${did}.ipfs.w3s.link`);
       if (secondaryMethod !== "none") await upload(secondaryMethod, file);
 
@@ -367,6 +411,39 @@ export const Create = () => {
           <Typography alignSelf="flex-start" variant="h2">
             Storage Provider
           </Typography>
+          <Stack className="form__setup">
+            <Typography color="black" fontSize="large" alignSelf="flex-start">
+              Setup primary storage: {primaryMethod}
+            </Typography>
+            <Stack direction="row" gap={2}>
+              <TextField
+                id="outlined-basic"
+                variant="outlined"
+                value={emailAddress}
+                onChange={(e) =>
+                  setEmailAddress(e.target.value as `${string}@${string}`)
+                }
+                label="Email"
+              ></TextField>
+              <Button
+                variant="outlined"
+                onClick={() => verifyStorageAccount("primary")}
+              >
+                Verify account
+              </Button>
+              <Button
+                variant="outlined"
+                disabled={createAccountDisabled}
+                onClick={() => createStorageAccount("primary")}
+              >
+                Create account
+              </Button>
+              <Button variant="outlined" onClick={() => completeStorageSetup()}>
+                Complete setup
+              </Button>
+            </Stack>
+            <Typography color="black">{setupMessage}</Typography>
+          </Stack>
           <FormControl fullWidth>
             <InputLabel
               id="demo-simple-select-label"
@@ -460,7 +537,11 @@ export const Create = () => {
               style={{ width: "100%" }}
             >
               <CircularProgress />
-              <Typography>{currentAction}</Typography>
+              <Typography>
+                {currentAction === "uploading" && "Uploading"}
+                {currentAction === "minting" && "Minting"}
+                {currentAction === "encrypting" && "Encrypting"}
+              </Typography>
             </Stack>
           )}
         </>
