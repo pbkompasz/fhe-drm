@@ -3,10 +3,11 @@ import { Metadata } from "../components/create/Create";
 import nftABI from "./RecordNFT.json";
 import { createInstance, getPublicKeyCallParams, initFhevm } from "fhevmjs";
 
-const contractAddress = "0x8Fdb26641d14a80FCCBE87BF455338Dd9C539a50";
+const contractAddress = "0x3B19180930B3229b7652849A2798a305d0a07911";
+const provider = new ethers.BrowserProvider(window.ethereum);
+const contract = new Contract(contractAddress, nftABI.output.abi, provider);
 
 const mintNFT = async (uri: string, seed: number, metadata: Metadata[]) => {
-  const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
   const signer = await provider.getSigner();
   await initFhevm();
 
@@ -16,61 +17,84 @@ const mintNFT = async (uri: string, seed: number, metadata: Metadata[]) => {
   const decoded = ethers.AbiCoder.defaultAbiCoder().decode(["bytes"], ret);
   const chainPublicKey = decoded[0];
 
-  const ctr = new ethers.Contract(contractAddress, nftABI.abi, signer);
-
   const instance = await createInstance({ chainId, publicKey: chainPublicKey });
-  // const metadataArray = [
-  //   {
-  //     name: "Name1",
-  //     value: ethers.encodeBytes32String("Value1"),
-  //     encrypted: false,
-  //   },
-  // ];
+  const metadataArray = [
+    {
+      name: "Name1",
+      value: ethers.encodeBytes32String("Value1"),
+      encrypted: false,
+    },
+  ];
 
+  const ctx = new Contract(contractAddress, nftABI.output.abi, signer);
   const encryptedKey = instance.encrypt64(seed);
-  console.log(encryptedKey);
-  const tx = await ctr.mintNFT(
+  const tx = await ctx.mintNFT(
     uri,
-    seed,
-    metadata.map((m) => {
-      m.value = ethers.encodeBytes32String(String(m.value));
-      return m;
-    })
+    encryptedKey,
+    // metadata.map((m) => {
+    //   m.value = ethers.encodeBytes32String(String(m.value));
+    //   return m;
+    // })
+    metadataArray
   );
   await tx.wait();
 
-  return 1;
+  const address = await signer.getAddress();
+  const tokens = await contract.balanceOf(address);
+
+  return Number(tokens) - 1;
 };
 
 const getNFTs = async () => {
-  const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
-  const contract = new Contract(contractAddress, nftABI.abi, provider);
-  const tokens = await contract.getAllTokens();
+  const signer = await provider.getSigner();
+  const address = await signer.getAddress();
+  const tokens = await contract.balanceOf(address);
   return tokens;
 };
 
 const getNFT = async (id: number) => {
-  const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
-  const contract = new Contract(contractAddress, nftABI.abi, provider);
+  try {
+    await initFhevm();
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const ctx = new Contract(contractAddress, nftABI.output.abi, signer);
+    const uri = await ctx.getTokenURI(id);
+    console.log(uri);
+    const network = await provider.getNetwork();
+    const chainId = +network.chainId.toString();
+    const ret = await provider.call(getPublicKeyCallParams());
+    const decoded = ethers.AbiCoder.defaultAbiCoder().decode(["bytes"], ret);
+    const chainPublicKey = decoded[0];
 
-  const network = await provider.getNetwork();
-  const chainId = +network.chainId.toString();
-  const ret = await provider.call(getPublicKeyCallParams());
-  const decoded = ethers.AbiCoder.defaultAbiCoder().decode(["bytes"], ret);
-  const chainPublicKey = decoded[0];
+    const instance = await createInstance({
+      chainId,
+      publicKey: chainPublicKey,
+    });
+    const { publicKey, eip712 } = instance.generatePublicKey({
+      verifyingContract: contractAddress,
+    });
 
-  const instance = await createInstance({ chainId, publicKey: chainPublicKey });
-  const publicKey = instance.getPublicKey(contractAddress);
+    const params = [await signer.getAddress(), JSON.stringify(eip712)];
+    const signature: string = await window.ethereum.request({
+      method: "eth_signTypedData_v4",
+      params,
+    });
+    instance.setSignature(contractAddress, signature);
 
-  const uri = await contract.getFunction("getTokenURI").call(0);
-  const originalSeed = await contract.getPrivateKeySimple(
-    id,
-    publicKey,
-    publicKey?.signature
-  );
-  const seed = instance.decrypt(contractAddress, originalSeed);
+    const originalSeed = await ctx.getPrivateKeySimple(
+      id,
+      publicKey,
+      signature
+    );
+    console.log(originalSeed);
+    const seed = instance.decrypt(contractAddress, originalSeed);
+    console.log(seed);
+    console.log(uri);
 
-  return { uri, seed, originalSeed };
+    return { uri, seed, originalSeed };
+  } catch (error) {
+    console.log(error);
+  }
 };
 
 const createCollection = async (
