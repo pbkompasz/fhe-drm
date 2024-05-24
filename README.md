@@ -1,6 +1,7 @@
 # fhe-drm
 On chain DRM system using Zama's fhEVM
 ![Create a record](assets/screenshot.png)
+[![Demo](assets/screenshot.png)](https://vimeo.com/950060614)
 
 ## How it works
 
