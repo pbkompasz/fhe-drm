@@ -1,7 +1,8 @@
 # fhe-drm
-On chain DRM system using Zama's fhEVM
-![Create a record](assets/screenshot.png)
+
+Watch the demo video
 [![Demo](assets/screenshot.png)](https://vimeo.com/950060614)
+The frontend is deployed here: https://drm-pbkompasz-pbkompaszs-projects.vercel.app/
 
 ## How it works
 
@@ -13,7 +14,7 @@ In the current implementation, the encryption key is generated from a numeric se
 
 ## Run locally
 
-``` bash
+```bash
 # Start node locally
 cd fhevm-hardhat-template
 pnpm i
@@ -26,4 +27,3 @@ npm run dev
 ```
 
 When creating the first record, you will have to create a w3up account, see [this](https://web3.storage/docs/how-to/create-account/)
-
