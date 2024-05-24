@@ -17,8 +17,6 @@ contract RecordNFT is ERC721, Reencrypt {
     struct TokenData {
         string tokenURI;
         euint64 tokenPrivateKey;
-        euint32[8] privateKeyComplex;
-        bool isKeyComplex;
         mapping(string => string) metadata;
         mapping(string => euint64) privateMetadata;
         Metadata[] tokenMetadata;
@@ -29,8 +27,8 @@ contract RecordNFT is ERC721, Reencrypt {
         bool encrypted;
     }
 
-    mapping(uint256 id => TokenData token) private _tokens;
-    mapping(address id => uint256[] tokenIds) public userTokens;
+    mapping(uint256 => TokenData) private _tokens;
+    mapping(address => uint256[]) public userTokens;
 
     constructor() ERC721("RecordNFT", "RNFT") {
         tokenCounter = 0;
@@ -39,27 +37,20 @@ contract RecordNFT is ERC721, Reencrypt {
     function mintNFT(
         string memory tokenURI,
         bytes calldata encryptedKey,
-        bytes[8] memory tokenPrivateKey,
-        MetadataInput[] memory metadataArray,
-        bool useComplexKey
-    ) external {
-        // TODO Encrypt using public key of sender
+        MetadataInput[] memory metadataArray //,
+    ) external // bool useComplexKey
+    {
         uint256 tokenId = tokenCounter;
         _safeMint(msg.sender, tokenId);
 
         TokenData storage token = _tokens[tokenCounter];
         token.tokenURI = tokenURI;
-        token.isKeyComplex = useComplexKey;
-        if (useComplexKey) {
-            _setPrivateKeyComplex(tokenId, tokenPrivateKey);
-        } else {
-            token.tokenPrivateKey = TFHE.asEuint64(encryptedKey);
-        }
+        token.tokenPrivateKey = TFHE.asEuint64(encryptedKey);
 
         // Keep track of the ids for each user
         userTokens[msg.sender].push(tokenId);
 
-        for (uint256 i = 0; i < metadataArray.length; i++) {
+        for (uint i = 0; i < metadataArray.length; i++) {
             string memory metadataKey = metadataArray[i].name;
             bytes memory value = metadataArray[i].value;
             bool encrypted = metadataArray[i].encrypted;
@@ -80,7 +71,7 @@ contract RecordNFT is ERC721, Reencrypt {
         bytes32 publicKey,
         bytes calldata signature
     ) public view virtual onlySignedPublicKey(publicKey, signature) returns (bytes memory) {
-        require(msg.sender == ownerOf(tokenId), "Caller is not the owner");
+        require(msg.sender == ownerOf(tokenId), "Caller is not the owner of the token");
         return TFHE.reencrypt(_tokens[tokenId].tokenPrivateKey, publicKey, 0);
     }
 
@@ -90,7 +81,7 @@ contract RecordNFT is ERC721, Reencrypt {
         bytes32 publicKey,
         bytes calldata signature
     ) public view virtual onlySignedPublicKey(publicKey, signature) returns (bytes[8] memory) {
-        require(msg.sender == ownerOf(tokenId), "Caller is not the owner");
+        require(msg.sender == ownerOf(tokenId), "Caller is not the owner of the token");
         bytes[8] memory keys;
         for (uint i = 0; i < 8; i++) {
             keys[i] = TFHE.reencrypt(_tokens[tokenId].privateKeyComplex[i], publicKey, 0);
@@ -100,7 +91,7 @@ contract RecordNFT is ERC721, Reencrypt {
 
     // Assign the whole array
     function _setPrivateKeyComplex(uint256 tokenId, bytes[8] memory tokenPrivateKey) internal virtual {
-        for (uint256 i = 0; i < 8; i++) {
+        for (uint i = 0; i < 8; i++) {
             _tokens[tokenId].privateKeyComplex[i] = TFHE.asEuint32(tokenPrivateKey[i]);
         }
     }
@@ -134,10 +125,9 @@ contract RecordNFT is ERC721, Reencrypt {
         uint64 tokenId,
         string memory name,
         bytes32 publicKey,
-        bytes calldata signature)
-    public view virtual onlySignedPublicKey(publicKey, signature) returns (bytes memory) {
-        require(msg.sender == ownerOf(tokenId), "Caller is not the owner");
+        bytes calldata signature
+    ) public view virtual onlySignedPublicKey(publicKey, signature) returns (bytes memory) {
+        require(msg.sender == ownerOf(tokenId), "Caller is not the owner of the token");
         return TFHE.reencrypt(_tokens[tokenId].privateMetadata[name], publicKey, 0);
     }
-
 }
