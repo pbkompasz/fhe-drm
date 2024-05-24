@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.20;
 
 import "fhevm/abstracts/Reencrypt.sol";
 import "fhevm/lib/TFHE.sol";
@@ -15,58 +15,63 @@ contract RecordNFT is ERC721, Reencrypt {
     }
 
     struct TokenData {
-        uint256 id;
         string tokenURI;
         euint64 tokenPrivateKey;
         euint32[8] privateKeyComplex;
-        // mapping(bytes32 => string) metadata;
+        bool isKeyComplex;
         mapping(string => string) metadata;
-        // mapping(bytes32 => euint64) privateMetadata;
         mapping(string => euint64) privateMetadata;
+        Metadata[] tokenMetadata;
     }
 
-    TokenData[] private _tokens;
+    struct Metadata {
+        string name;
+        bool encrypted;
+    }
+
+    mapping(uint256 id => TokenData token) private _tokens;
+    mapping(address id => uint256[] tokenIds) public userTokens;
 
     constructor() ERC721("RecordNFT", "RNFT") {
         tokenCounter = 0;
     }
 
     function mintNFT(
-        string memory _tokenURI,
+        string memory tokenURI,
         bytes calldata encryptedKey,
-        MetadataInput[] memory metadataArray
+        bytes[8] memory tokenPrivateKey,
+        MetadataInput[] memory metadataArray,
+        bool useComplexKey
     ) external {
         // TODO Encrypt using public key of sender
         uint256 tokenId = tokenCounter;
         _safeMint(msg.sender, tokenId);
 
-        TokenData storage newToken = _tokens.push();
-        newToken.tokenURI = _tokenURI;
-        newToken.tokenPrivateKey = TFHE.asEuint64(encryptedKey);
-        newToken.id = tokenId;
+        TokenData storage token = _tokens[tokenCounter];
+        token.tokenURI = tokenURI;
+        token.isKeyComplex = useComplexKey;
+        if (useComplexKey) {
+            _setPrivateKeyComplex(tokenId, tokenPrivateKey);
+        } else {
+            token.tokenPrivateKey = TFHE.asEuint64(encryptedKey);
+        }
 
-        for (uint i = 0; i < metadataArray.length; i++) {
-            // bytes32 metadataKey = keccak256(abi.encodePacked(metadataArray[i].name));
+        // Keep track of the ids for each user
+        userTokens[msg.sender].push(tokenId);
+
+        for (uint256 i = 0; i < metadataArray.length; i++) {
             string memory metadataKey = metadataArray[i].name;
             bytes memory value = metadataArray[i].value;
-            if (metadataArray[i].encrypted) {
-                newToken.privateMetadata[metadataKey] = TFHE.asEuint64(value);
+            bool encrypted = metadataArray[i].encrypted;
+            if (encrypted) {
+                token.privateMetadata[metadataKey] = TFHE.asEuint64(value);
             } else {
-                newToken.metadata[metadataKey] = string(value);
+                token.metadata[metadataKey] = string(value);
             }
+            token.tokenMetadata.push(Metadata(metadataKey, encrypted));
         }
+
         tokenCounter++;
-    }
-
-    function _setTokenURI(uint256 tokenId, string memory _tokenURI) internal virtual {
-        _tokens[tokenId].tokenURI = _tokenURI;
-    }
-
-    // Assign the whole array
-    function _setPrivateKeyComplex(uint256 tokenId, bytes[8] memory _tokenPrivateKey) internal virtual {
-        for (uint i = 0; i < 8; i++) {
-            _tokens[tokenId].privateKeyComplex[i] = TFHE.asEuint32(_tokenPrivateKey[i]);
-        }
     }
 
     // just the seed as a number for now
@@ -75,7 +80,7 @@ contract RecordNFT is ERC721, Reencrypt {
         bytes32 publicKey,
         bytes calldata signature
     ) public view virtual onlySignedPublicKey(publicKey, signature) returns (bytes memory) {
-        require(msg.sender == ownerOf(tokenId), "Caller is not the owner of the token");
+        require(msg.sender == ownerOf(tokenId), "Caller is not the owner");
         return TFHE.reencrypt(_tokens[tokenId].tokenPrivateKey, publicKey, 0);
     }
 
@@ -85,7 +90,7 @@ contract RecordNFT is ERC721, Reencrypt {
         bytes32 publicKey,
         bytes calldata signature
     ) public view virtual onlySignedPublicKey(publicKey, signature) returns (bytes[8] memory) {
-        require(msg.sender == ownerOf(tokenId), "Caller is not the owner of the token");
+        require(msg.sender == ownerOf(tokenId), "Caller is not the owner");
         bytes[8] memory keys;
         for (uint i = 0; i < 8; i++) {
             keys[i] = TFHE.reencrypt(_tokens[tokenId].privateKeyComplex[i], publicKey, 0);
@@ -93,20 +98,20 @@ contract RecordNFT is ERC721, Reencrypt {
         return keys;
     }
 
-    function getAllTokens() external view returns (uint256[] memory) {
-        uint256[] memory ids = new uint256[](tokenCounter);
-        for (uint256 i = 0; i < ids.length; i++) {
-            ids[i] = _tokens[i].id;
+    // Assign the whole array
+    function _setPrivateKeyComplex(uint256 tokenId, bytes[8] memory tokenPrivateKey) internal virtual {
+        for (uint256 i = 0; i < 8; i++) {
+            _tokens[tokenId].privateKeyComplex[i] = TFHE.asEuint32(tokenPrivateKey[i]);
         }
-        return ids;
+    }
+
+    function isPrivateKeyCorrect(uint64 tokenId, bytes memory seed) external view returns (bool) {
+        return TFHE.decrypt(TFHE.eq(TFHE.asEuint64(seed), _tokens[tokenId].tokenPrivateKey));
     }
 
     function getTokenURI(uint64 tokenId) public view virtual returns (string memory) {
-        for (uint256 i = 0; i < _tokens.length; i++) {
-            if (_tokens[i].id == tokenId) {
-                return _tokens[i].tokenURI;
-            }
-        }
+        require(ownerOf(tokenId) == msg.sender, "No access");
+        return _tokens[tokenId].tokenURI;
     }
 
     function searchEncryptedMetadataEquals(
@@ -116,4 +121,23 @@ contract RecordNFT is ERC721, Reencrypt {
     ) external view returns (bool) {
         return TFHE.decrypt(TFHE.eq(value, _tokens[tokenId].privateMetadata[name]));
     }
+
+    function getMetadatas(uint64 tokenId) public view returns (Metadata[] memory) {
+        return _tokens[tokenId].tokenMetadata;
+    }
+
+    function getMetadata(uint64 tokenId, string memory name) public view returns (string memory) {
+        return _tokens[tokenId].metadata[name];
+    }
+
+    function getMetadataEncrypted(
+        uint64 tokenId,
+        string memory name,
+        bytes32 publicKey,
+        bytes calldata signature)
+    public view virtual onlySignedPublicKey(publicKey, signature) returns (bytes memory) {
+        require(msg.sender == ownerOf(tokenId), "Caller is not the owner");
+        return TFHE.reencrypt(_tokens[tokenId].privateMetadata[name], publicKey, 0);
+    }
+
 }
